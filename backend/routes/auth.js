@@ -2,29 +2,29 @@ import express from 'express';
 import { body } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import prisma from '../utils/prisma.js';
+import { PrismaClient } from '@prisma/client';
 import { generateToken, protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
 // @route   POST /api/auth/login
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('username').trim().notEmpty().withMessage('Username/Email is required'),
+  body('username').trim().notEmpty().withMessage('Username is required'),
   body('password').notEmpty().withMessage('Password is required'),
   validate
 ], async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Find user by email (username field is used as email)
     const user = await prisma.user.findUnique({
-      where: { email: username.toLowerCase() }
+      where: { username: username.toLowerCase() }
     });
     
-    if (!user) {
+    if (!user || !user.isActive) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -34,14 +34,19 @@ router.post('/login', [
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() }
+    });
+
     const token = generateToken(user.id);
 
     res.json({
       token,
       user: {
         id: user.id,
-        username: user.email,
-        name: user.name,
+        username: user.username,
         role: user.role,
         email: user.email
       },
@@ -57,25 +62,12 @@ router.post('/login', [
 // @desc    Get current user
 // @access  Private
 router.get('/me', protect, async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    res.json({
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      email: user.email
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
+  res.json({
+    id: req.user.id,
+    username: req.user.username,
+    role: req.user.role,
+    email: req.user.email
+  });
 });
 
 // @route   POST /api/auth/refresh
@@ -95,9 +87,7 @@ router.post('/refresh', async (req, res) => {
 
     // Verify token (even if expired, we can still decode it)
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id }
-    });
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'User not found or inactive' });
@@ -134,14 +124,7 @@ router.post('/change-password', [
   try {
     const { currentPassword, newPassword } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
@@ -172,7 +155,6 @@ router.post('/verify-admin', [
   try {
     const { email, password } = req.body;
 
-    // Check if current user is admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({ 
         verified: false,
@@ -180,7 +162,6 @@ router.post('/verify-admin', [
       });
     }
 
-    // Find user by email
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() }
     });
@@ -192,7 +173,6 @@ router.post('/verify-admin', [
       });
     }
 
-    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
@@ -202,7 +182,6 @@ router.post('/verify-admin', [
       });
     }
 
-    // Log the verification attempt
     console.log(`Admin verification successful for ${email} at ${new Date().toISOString()}`);
 
     res.json({
@@ -237,20 +216,12 @@ router.put('/update-admin-credentials', [
   try {
     const { currentPassword, newEmail, newPassword } = req.body;
 
-    // Check if current user is admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Only administrators can update credentials' });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     
-    // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Current password is incorrect' });
@@ -258,9 +229,7 @@ router.put('/update-admin-credentials', [
 
     const updates = {};
 
-    // Update email if provided
     if (newEmail && newEmail !== user.email) {
-      // Check if email already exists
       const existingUser = await prisma.user.findUnique({
         where: { email: newEmail.toLowerCase() }
       });
@@ -270,7 +239,6 @@ router.put('/update-admin-credentials', [
       updates.email = newEmail.toLowerCase();
     }
 
-    // Update password if provided
     if (newPassword) {
       updates.password = await bcrypt.hash(newPassword, 10);
     }

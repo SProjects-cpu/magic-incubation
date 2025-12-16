@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
-import prisma from '../utils/prisma.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export const protect = async (req, res, next) => {
   try {
@@ -20,9 +22,7 @@ export const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id }
-    });
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'User not found or inactive' });
