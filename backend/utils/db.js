@@ -7,31 +7,33 @@ const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, '../data');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+// Ensure data directory exists (only in non-serverless environments)
+if (process.env.VERCEL !== '1') {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
 
-// Initialize data files
-const initializeDataFiles = () => {
-  const files = {
-    'users.json': [],
-    'startups.json': [],
-    'smc-schedules.json': [],
-    'one-on-one-sessions.json': [],
-    'settings.json': {},
-    'landing-page.json': {}
+  // Initialize data files
+  const initializeDataFiles = () => {
+    const files = {
+      'users.json': [],
+      'startups.json': [],
+      'smc-schedules.json': [],
+      'one-on-one-sessions.json': [],
+      'settings.json': {},
+      'landing-page.json': {}
+    };
+
+    Object.entries(files).forEach(([filename, defaultData]) => {
+      const filepath = path.join(DATA_DIR, filename);
+      if (!fs.existsSync(filepath)) {
+        fs.writeFileSync(filepath, JSON.stringify(defaultData, null, 2));
+      }
+    });
   };
 
-  Object.entries(files).forEach(([filename, defaultData]) => {
-    const filepath = path.join(DATA_DIR, filename);
-    if (!fs.existsSync(filepath)) {
-      fs.writeFileSync(filepath, JSON.stringify(defaultData, null, 2));
-    }
-  });
-};
-
-initializeDataFiles();
+  initializeDataFiles();
+}
 
 // Database operations
 class JsonDB {
