@@ -82,7 +82,8 @@ export default function Settings({ darkMode, toggleDarkMode, isGuest = false }) 
         return;
       }
       
-      const response = await fetch('http://localhost:5000/api/migration/status', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/migration/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -126,7 +127,8 @@ export default function Settings({ darkMode, toggleDarkMode, isGuest = false }) 
 
       // Send to backend for migration
       const token = localStorage.getItem('authToken');
-      const response = await fetch('http://localhost:5000/api/migration/migrate-localstorage', {
+       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${API_URL}/migration/migrate-localstorage`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
