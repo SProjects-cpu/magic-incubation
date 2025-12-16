@@ -99,7 +99,9 @@ router.post('/refresh', async (req, res) => {
 
     // Verify token (even if expired, we can still decode it)
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
-    const user = usersDB.findById(decoded.id);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
 
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'User not found or inactive' });
@@ -136,7 +138,14 @@ router.post('/change-password', [
   try {
     const { currentPassword, newPassword } = req.body;
 
-    const user = usersDB.findById(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
@@ -144,7 +153,10 @@ router.post('/change-password', [
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    usersDB.update(user.id, { password: hashedPassword });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword }
+    });
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
@@ -173,7 +185,9 @@ router.post('/verify-admin', [
     }
 
     // Find user by email
-    const user = usersDB.findOne({ email: email.toLowerCase() });
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
     
     if (!user || user.role !== 'admin' || !user.isActive) {
       return res.status(401).json({ 
@@ -232,7 +246,13 @@ router.put('/update-admin-credentials', [
       return res.status(403).json({ message: 'Only administrators can update credentials' });
     }
 
-    const user = usersDB.findById(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
@@ -245,7 +265,9 @@ router.put('/update-admin-credentials', [
     // Update email if provided
     if (newEmail && newEmail !== user.email) {
       // Check if email already exists
-      const existingUser = usersDB.findOne({ email: newEmail.toLowerCase() });
+      const existingUser = await prisma.user.findUnique({
+        where: { email: newEmail.toLowerCase() }
+      });
       if (existingUser && existingUser.id !== user.id) {
         return res.status(400).json({ message: 'Email already in use' });
       }
@@ -261,7 +283,10 @@ router.put('/update-admin-credentials', [
       return res.status(400).json({ message: 'No updates provided' });
     }
 
-    usersDB.update(user.id, updates);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updates
+    });
 
     res.json({ 
       message: 'Admin credentials updated successfully',
