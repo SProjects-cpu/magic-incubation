@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -182,12 +183,41 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Auto-create admin user if not exists
+async function ensureAdminUser() {
+  try {
+    const existingAdmin = await prisma.user.findUnique({
+      where: { username: 'admin' }
+    });
+    
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash('magic2024', 10);
+      await prisma.user.create({
+        data: {
+          username: 'admin',
+          email: 'admin@magic.com',
+          password: hashedPassword,
+          name: 'Administrator',
+          role: 'admin',
+          isActive: true
+        }
+      });
+      console.log('✅ Admin user created (admin/magic2024)');
+    }
+  } catch (error) {
+    console.error('Error ensuring admin user:', error.message);
+  }
+}
+
 // Start server
 app.listen(PORT, async () => {
   try {
     // Test database connection
     await prisma.$queryRaw`SELECT 1`;
     console.log('✅ PostgreSQL database connected');
+    
+    // Ensure admin user exists
+    await ensureAdminUser();
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
     console.error('   Check your DATABASE_URL in .env file');
