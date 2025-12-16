@@ -1,10 +1,11 @@
 const MagicBackground = ({ children, className = '' }) => {
   return (
     <div className={`relative min-h-screen ${className}`}>
-      {/* Background Image */}
+      {/* Background with CSS gradient fallback */}
       <div 
         className="fixed inset-0 z-0"
         style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #6B8DD6 100%)',
           backgroundImage: 'url(/ui_magic/magic_back_canva.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
