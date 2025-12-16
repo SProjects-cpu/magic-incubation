@@ -32,14 +32,16 @@ import migrationRoutes from './routes/migration.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Create necessary directories
-const dirs = ['data', 'uploads', 'logs'];
-dirs.forEach(dir => {
-  const dirPath = path.join(__dirname, dir);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-});
+// Create necessary directories (only in non-serverless environments)
+if (process.env.VERCEL !== '1') {
+  const dirs = ['data', 'uploads', 'logs'];
+  dirs.forEach(dir => {
+    const dirPath = path.join(__dirname, dir);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  });
+}
 
 // Security middleware
 app.use(helmet());
