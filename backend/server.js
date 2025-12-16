@@ -8,7 +8,6 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,44 +32,40 @@ import migrationRoutes from './routes/migration.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Trust proxy for production (Render, Heroku, etc.)
-// This fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+// Trust proxy for Render deployment (must be before rate limiter)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Create necessary directories (only in non-serverless environments)
-if (process.env.VERCEL !== '1') {
-  const dirs = ['data', 'uploads', 'logs'];
-  dirs.forEach(dir => {
-    const dirPath = path.join(__dirname, dir);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-  });
-}
+// Create necessary directories
+const dirs = ['data', 'uploads', 'logs'];
+dirs.forEach(dir => {
+  const dirPath = path.join(__dirname, dir);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+});
 
 // Security middleware
 app.use(helmet());
 app.use(compression());
 
-// CORS configuration - Allow both localhost and production URLs
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://magic-incubation-frontend.onrender.com',
-  process.env.CORS_ORIGIN
-].filter(Boolean);
+  'https://magic-incubation-frontend.onrender.com'
+];
 
 app.use(cors({
   origin: function(origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.CORS_ORIGIN === origin) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow all origins in production for now
+      callback(null, true); // Allow all origins in case of custom deployments
     }
   },
   credentials: true
@@ -79,9 +74,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false
+  max: 100 // limit each IP to 100 requests per windowMs
 });
 app.use('/api/', limiter);
 
@@ -207,41 +200,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Auto-create admin user if not exists
-async function ensureAdminUser() {
-  try {
-    const existingAdmin = await prisma.user.findUnique({
-      where: { username: 'admin' }
-    });
-    
-    if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash('magic2024', 10);
-      await prisma.user.create({
-        data: {
-          username: 'admin',
-          email: 'admin@magic.com',
-          password: hashedPassword,
-          name: 'Administrator',
-          role: 'admin',
-          isActive: true
-        }
-      });
-      console.log('✅ Admin user created (admin/magic2024)');
-    }
-  } catch (error) {
-    console.error('Error ensuring admin user:', error.message);
-  }
-}
-
 // Start server
 app.listen(PORT, async () => {
   try {
     // Test database connection
     await prisma.$queryRaw`SELECT 1`;
     console.log('✅ PostgreSQL database connected');
-    
-    // Ensure admin user exists
-    await ensureAdminUser();
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
     console.error('   Check your DATABASE_URL in .env file');
