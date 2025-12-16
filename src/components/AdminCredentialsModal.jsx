@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Lock, Mail, Eye, EyeOff, CheckCircle } from 'lucide-react';
-import { api } from '../utils/api';
 
 export default function AdminCredentialsModal({ isOpen, onClose, currentUser }) {
   const [formData, setFormData] = useState({
@@ -60,44 +59,68 @@ export default function AdminCredentialsModal({ isOpen, onClose, currentUser }) 
     setLoading(true);
 
     try {
-      const data = await api.updateAdminCredentials(
-        formData.currentPassword,
-        formData.newEmail || null,
-        formData.newPassword || null
-      );
-
-      setSuccess(data.message || 'Credentials updated successfully!');
-      setFormData({
-        currentPassword: '',
-        newEmail: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      const token = localStorage.getItem('authToken');
       
-      // If password was updated, need to re-login
-      if (formData.newPassword) {
+      if (!token) {
+        setError('Session expired. Please login again.');
         setTimeout(() => {
-          alert('Password updated successfully! Please login again with your new password.');
-          api.logout();
+          window.location.reload();
+        }, 2000);
+        return;
+      }
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/auth/update-admin-credentials`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentPassword: formData.currentPassword,
+          newEmail: formData.newEmail || undefined,
+          newPassword: formData.newPassword || undefined
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess(data.message || 'Credentials updated successfully!');
+        setFormData({
+          currentPassword: '',
+          newEmail: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+        
+        // If password was updated, need to re-login
+        if (formData.newPassword) {
+          setTimeout(() => {
+            alert('Password updated successfully! Please login again with your new password.');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('authUser');
+            window.location.reload();
+          }, 2000);
+        } else {
+          setTimeout(() => {
+            onClose();
+            window.location.reload(); // Refresh to update user data
+          }, 2000);
+        }
+      } else if (response.status === 401 && (data.message?.includes('token') || data.message?.includes('expired'))) {
+        setError('Your session has expired. Please login again.');
+        setTimeout(() => {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('authUser');
           window.location.reload();
         }, 2000);
       } else {
-        setTimeout(() => {
-          onClose();
-          window.location.reload(); // Refresh to update user data
-        }, 2000);
+        setError(data.message || 'Failed to update credentials');
       }
     } catch (error) {
       console.error('Update credentials error:', error);
-      if (error.message?.includes('Session expired') || error.message?.includes('token')) {
-        setError('Your session has expired. Please login again.');
-        setTimeout(() => {
-          api.logout();
-          window.location.reload();
-        }, 2000);
-      } else {
-        setError(error.message || 'Failed to update credentials');
-      }
+      setError('Network error. Please check if backend is running and try again.');
     } finally {
       setLoading(false);
     }
