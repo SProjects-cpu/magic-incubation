@@ -12,18 +12,19 @@ const router = express.Router();
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('username').trim().notEmpty().withMessage('Username is required'),
+  body('username').trim().notEmpty().withMessage('Username/Email is required'),
   body('password').notEmpty().withMessage('Password is required'),
   validate
 ], async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // Find user by email (username field is used as email)
     const user = await prisma.user.findUnique({
-      where: { username: username.toLowerCase() }
+      where: { email: username.toLowerCase() }
     });
     
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -33,19 +34,14 @@ router.post('/login', [
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() }
-    });
-
     const token = generateToken(user.id);
 
     res.json({
       token,
       user: {
         id: user.id,
-        username: user.username,
+        username: user.email,
+        name: user.name,
         role: user.role,
         email: user.email
       },
