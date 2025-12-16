@@ -33,6 +33,12 @@ import migrationRoutes from './routes/migration.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy for production (Render, Heroku, etc.)
+// This fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Create necessary directories (only in non-serverless environments)
 if (process.env.VERCEL !== '1') {
   const dirs = ['data', 'uploads', 'logs'];
@@ -48,16 +54,34 @@ if (process.env.VERCEL !== '1') {
 app.use(helmet());
 app.use(compression());
 
-// CORS configuration
+// CORS configuration - Allow both localhost and production URLs
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://magic-incubation-frontend.onrender.com',
+  process.env.CORS_ORIGIN
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins in production for now
+    }
+  },
   credentials: true
 }));
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
 });
 app.use('/api/', limiter);
 
