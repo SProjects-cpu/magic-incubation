@@ -51,6 +51,11 @@ class ApiClient {
     return headers;
   }
 
+  // Get API base URL
+  getBaseUrl() {
+    return API_URL.replace('/api', '');
+  }
+
   // Make API request
   async request(endpoint, options = {}) {
     const url = `${API_URL}${endpoint}`;
@@ -113,6 +118,17 @@ class ApiClient {
     return this.request('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword })
+    });
+  }
+
+  async updateAdminCredentials(currentPassword, newEmail, newPassword) {
+    return this.request('/auth/update-admin-credentials', {
+      method: 'PUT',
+      body: JSON.stringify({ 
+        currentPassword, 
+        newEmail: newEmail || undefined, 
+        newPassword: newPassword || undefined 
+      })
     });
   }
 
@@ -290,6 +306,18 @@ class ApiClient {
   async deleteAchievement(startupId, achievementId) {
     return this.request(`/achievements/${startupId}/${achievementId}`, {
       method: 'DELETE'
+    });
+  }
+
+  // Migration endpoints
+  async getMigrationStatus() {
+    return this.request('/migration/status');
+  }
+
+  async migrateLocalStorage(localData) {
+    return this.request('/migration/migrate-localstorage', {
+      method: 'POST',
+      body: JSON.stringify(localData)
     });
   }
 }
