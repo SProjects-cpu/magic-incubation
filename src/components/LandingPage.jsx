@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { storage } from '../utils/storage';
 import MagicBackground from './MagicBackground';
-import SmokeyCursor from '@/components/ui/smokey-cursor';
 
 const LandingPage = ({ onNavigateToLogin }) => {
   const [landingData, setLandingData] = useState(null);
@@ -31,13 +30,11 @@ const LandingPage = ({ onNavigateToLogin }) => {
   });
 
   useEffect(() => {
-    // Load landing page data from storage
     const data = storage.get('landingPageData');
     if (data) {
       setLandingData(data);
     }
 
-    // Load real startup statistics
     const startups = storage.get('startups', []);
     const stats = {
       total: startups.length,
@@ -49,7 +46,6 @@ const LandingPage = ({ onNavigateToLogin }) => {
     setStartupStats(stats);
 
     if (!data) {
-      // Load default data
       import('../utils/landingPageData').then(module => {
         setLandingData(module.defaultLandingData);
       });
@@ -90,18 +86,6 @@ const LandingPage = ({ onNavigateToLogin }) => {
 
   return (
     <MagicBackground>
-      {/* Smokey Cursor Effect - Light Rainbow Smoke */}
-      <SmokeyCursor
-        simulationResolution={128}
-        dyeResolution={1024}
-        densityDissipation={0.98}
-        velocityDissipation={0.99}
-        splatRadius={0.5}
-        splatForce={5000}
-        enableShading={true}
-        colorUpdateSpeed={10}
-      />
-      
       <div className="min-h-screen relative z-10">
         {/* Header */}
       <motion.header
@@ -117,7 +101,7 @@ const LandingPage = ({ onNavigateToLogin }) => {
               whileHover={{ scale: 1.05 }}
             >
               <img 
-                src="/ui_magic/magic_icon.png" 
+                src="/magic_icon.png" 
                 alt="MAGIC Logo" 
                 className="h-12 w-12 object-contain"
               />
@@ -246,7 +230,6 @@ const LandingPage = ({ onNavigateToLogin }) => {
             </h4>
             <div className="relative w-48 h-48 mx-auto mb-6">
               <svg viewBox="0 0 200 200" className="transform -rotate-90">
-                {/* Donut segments with real data */}
                 {(() => {
                   const total = startupStats.total || 1;
                   const circumference = 2 * Math.PI * 80;
@@ -621,7 +604,7 @@ const LandingPage = ({ onNavigateToLogin }) => {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-3 mb-4 md:mb-0">
               <img 
-                src="/ui_magic/magic_icon.png" 
+                src="/magic_icon.png" 
                 alt="MAGIC Logo" 
                 className="h-10 w-10 object-contain"
               />
