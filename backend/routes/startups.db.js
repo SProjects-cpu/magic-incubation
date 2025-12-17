@@ -41,7 +41,17 @@ router.get('/', protect, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    res.json(startups);
+    // Map backend field names to frontend field names for compatibility
+    const mappedStartups = startups.map(startup => ({
+      ...startup,
+      companyName: startup.name,
+      founderName: startup.founder,
+      founderEmail: startup.email,
+      founderMobile: startup.phone,
+      magicCode: startup.id.slice(-6).toUpperCase()
+    }));
+
+    res.json(mappedStartups);
   } catch (error) {
     console.error('Error fetching startups:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -78,7 +88,17 @@ router.get('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Startup not found' });
     }
 
-    res.json(startup);
+    // Map backend field names to frontend field names
+    const mappedStartup = {
+      ...startup,
+      companyName: startup.name,
+      founderName: startup.founder,
+      founderEmail: startup.email,
+      founderMobile: startup.phone,
+      magicCode: startup.id.slice(-6).toUpperCase()
+    };
+
+    res.json(mappedStartup);
   } catch (error) {
     console.error('Error fetching startup:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -91,37 +111,66 @@ router.get('/:id', protect, async (req, res) => {
 router.post('/', [
   protect,
   adminOnly,
-  body('name').trim().notEmpty().withMessage('Company name is required'),
-  body('founder').trim().notEmpty().withMessage('Founder name is required'),
+  // Accept both frontend field names (companyName, founderName) and backend field names (name, founder)
+  body('name').optional().trim(),
+  body('companyName').optional().trim(),
+  body('founder').optional().trim(),
+  body('founderName').optional().trim(),
   body('email').optional().isEmail().withMessage('Valid email is required'),
+  body('founderEmail').optional().isEmail().withMessage('Valid email is required'),
   body('sector').trim().notEmpty().withMessage('Sector is required'),
   validate
 ], async (req, res) => {
   try {
+    // Map frontend field names to backend field names
+    const name = req.body.name || req.body.companyName;
+    const founder = req.body.founder || req.body.founderName;
+    const email = req.body.email || req.body.founderEmail;
+    const phone = req.body.phone || req.body.founderMobile;
+    
+    // Validate required fields after mapping
+    if (!name) {
+      return res.status(400).json({ message: 'Company name is required' });
+    }
+    if (!founder) {
+      return res.status(400).json({ message: 'Founder name is required' });
+    }
+    if (!req.body.sector) {
+      return res.status(400).json({ message: 'Sector is required' });
+    }
+
     // Check if email already exists (if provided)
-    if (req.body.email) {
+    if (email) {
       const existing = await prisma.startup.findFirst({
-        where: { email: req.body.email }
+        where: { email: email }
       });
       if (existing) {
         return res.status(400).json({ message: 'Startup with this email already exists' });
       }
     }
 
+    // Build description from frontend fields if not provided
+    const description = req.body.description || 
+      (req.body.problemSolving && req.body.solution 
+        ? `Problem: ${req.body.problemSolving}\nSolution: ${req.body.solution}` 
+        : null);
+
     const startup = await prisma.startup.create({
       data: {
-        name: req.body.name,
-        founder: req.body.founder,
-        email: req.body.email,
-        phone: req.body.phone,
-        sector: req.body.sector,
-        stage: req.body.stage || 'Onboarded',
-        description: req.body.description,
+        name: name,
+        founder: founder,
+        email: email,
+        phone: phone,
+        sector: req.body.sector === 'Other' ? (req.body.sectorOther || 'Other') : req.body.sector,
+        stage: req.body.stage || 'S0',
+        description: description,
         website: req.body.website,
-        fundingReceived: req.body.fundingReceived || 0,
-        employeeCount: req.body.employeeCount || 0,
-        revenueGenerated: req.body.revenueGenerated || 0,
-        onboardedDate: req.body.onboardedDate ? new Date(req.body.onboardedDate) : new Date(),
+        fundingReceived: req.body.fundingReceived || req.body.revenue || 0,
+        employeeCount: req.body.employeeCount || req.body.teamSize || 0,
+        revenueGenerated: req.body.revenueGenerated || req.body.revenue || 0,
+        onboardedDate: req.body.onboardedDate || req.body.registrationDate 
+          ? new Date(req.body.onboardedDate || req.body.registrationDate) 
+          : new Date(),
         dpiitNo: req.body.dpiitNo,
         recognitionDate: req.body.recognitionDate ? new Date(req.body.recognitionDate) : null,
         bhaskarId: req.body.bhaskarId
@@ -141,6 +190,27 @@ router.post('/', [
 router.put('/:id', [protect, adminOnly], async (req, res) => {
   try {
     const updateData = { ...req.body };
+    
+    // Map frontend field names to backend field names
+    if (updateData.companyName && !updateData.name) {
+      updateData.name = updateData.companyName;
+      delete updateData.companyName;
+    }
+    if (updateData.founderName && !updateData.founder) {
+      updateData.founder = updateData.founderName;
+      delete updateData.founderName;
+    }
+    if (updateData.founderEmail && !updateData.email) {
+      updateData.email = updateData.founderEmail;
+      delete updateData.founderEmail;
+    }
+    if (updateData.founderMobile && !updateData.phone) {
+      updateData.phone = updateData.founderMobile;
+      delete updateData.founderMobile;
+    }
+    
+    // Remove frontend-only fields that don't exist in database
+    delete updateData.magicCode;
     
     // Convert date strings to Date objects if present
     if (updateData.onboardedDate) {
