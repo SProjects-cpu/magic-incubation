@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Filter, Upload, Download, ChevronDown, FileJson, FileSpreadsheet } from 'lucide-react';
-import { storage, generateId } from '../utils/storage';
+import { Plus, Search, Filter, Upload, Download, ChevronDown, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { api } from '../utils/api';
 import { exportStartupsComprehensive } from '../utils/exportUtils';
 import ExportMenu from './ExportMenu';
 import StartupCard from './StartupCard';
@@ -23,6 +23,8 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
   const [filterSector, setFilterSector] = useState(initialSectorFilter || 'all');
   const [viewMode, setViewMode] = useState('grid');
   const [selectedStartup, setSelectedStartup] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [adminAuthModal, setAdminAuthModal] = useState({
     isOpen: false,
     title: '',
@@ -58,9 +60,18 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
     filterStartups();
   }, [startups, searchTerm, filterStage, filterSector]);
 
-  const loadStartups = () => {
-    const data = storage.get('startups', []);
-    setStartups(data);
+  const loadStartups = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.getStartups();
+      setStartups(data);
+    } catch (err) {
+      console.error('Error loading startups:', err);
+      setError(err.message || 'Failed to load startups');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filterStartups = () => {
@@ -85,21 +96,20 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
     setFilteredStartups(filtered);
   };
 
-  const handleAddStartup = (startupData) => {
-    const newStartup = {
-      id: generateId(),
-      ...startupData,
-      stage: 'S0',
-      status: 'Active',
-      pitchHistory: [],
-      oneOnOneHistory: [],
-      createdAt: new Date().toISOString()
-    };
-
-    const updated = [...startups, newStartup];
-    storage.set('startups', updated);
-    setStartups(updated);
-    setShowForm(false);
+  const handleAddStartup = async (startupData) => {
+    try {
+      const newStartup = await api.createStartup({
+        ...startupData,
+        stage: 'S0',
+        status: 'Active'
+      });
+      setStartups([...startups, newStartup]);
+      setShowForm(false);
+      alert('✅ Startup registered successfully!');
+    } catch (err) {
+      console.error('Error creating startup:', err);
+      alert(err.message || 'Failed to create startup');
+    }
   };
 
   const handleImportStartups = (importedStartups) => {
@@ -108,12 +118,27 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
       title: 'Import Startups',
       message: `You are about to import ${importedStartups.length} startup(s). Please authenticate to proceed with this operation.`,
       actionType: 'warning',
-      onConfirm: () => {
-        const updated = [...startups, ...importedStartups];
-        storage.set('startups', updated);
-        setStartups(updated);
-        setShowImport(false);
-        alert(`✅ Successfully imported ${importedStartups.length} startup(s)!`);
+      onConfirm: async () => {
+        try {
+          // Import startups one by one to the backend
+          const createdStartups = [];
+          for (const startup of importedStartups) {
+            try {
+              const created = await api.createStartup(startup);
+              createdStartups.push(created);
+            } catch (err) {
+              console.error(`Failed to import startup ${startup.companyName}:`, err);
+            }
+          }
+          
+          // Reload all startups from backend
+          await loadStartups();
+          setShowImport(false);
+          alert(`✅ Successfully imported ${createdStartups.length} of ${importedStartups.length} startup(s)!`);
+        } catch (err) {
+          console.error('Error importing startups:', err);
+          alert(err.message || 'Failed to import startups');
+        }
       }
     });
   };
@@ -124,11 +149,15 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
       title: 'Edit Startup',
       message: `You are about to edit "${updatedStartup.companyName}". Please authenticate to save changes.`,
       actionType: 'warning',
-      onConfirm: () => {
-        const updated = startups.map(s => s.id === updatedStartup.id ? updatedStartup : s);
-        storage.set('startups', updated);
-        setStartups(updated);
-        alert('✅ Startup updated successfully!');
+      onConfirm: async () => {
+        try {
+          const updated = await api.updateStartup(updatedStartup.id, updatedStartup);
+          setStartups(startups.map(s => s.id === updated.id ? updated : s));
+          alert('✅ Startup updated successfully!');
+        } catch (err) {
+          console.error('Error updating startup:', err);
+          alert(err.message || 'Failed to update startup');
+        }
       }
     });
   };
@@ -140,11 +169,15 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
       title: 'Delete Startup',
       message: `You are about to permanently delete "${startup?.companyName}". This action cannot be undone. Please authenticate to proceed.`,
       actionType: 'danger',
-      onConfirm: () => {
-        const updated = startups.filter(s => s.id !== id);
-        storage.set('startups', updated);
-        setStartups(updated);
-        alert('✅ Startup deleted successfully!');
+      onConfirm: async () => {
+        try {
+          await api.deleteStartup(id);
+          setStartups(startups.filter(s => s.id !== id));
+          alert('✅ Startup deleted successfully!');
+        } catch (err) {
+          console.error('Error deleting startup:', err);
+          alert(err.message || 'Failed to delete startup');
+        }
       }
     });
   };
@@ -157,6 +190,31 @@ export default function AllStartups({ isGuest = false, initialSectorFilter = nul
     if (count <= 12) return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6';
     return 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7';
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-magic-500" />
+        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading startups...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+          <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+          <button 
+            onClick={loadStartups}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
