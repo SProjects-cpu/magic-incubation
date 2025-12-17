@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { generateId } from '../utils/storage';
+
+// Generate unique ID
+const generateId = () => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
 
 export default function ImportStartups({ onClose, onImport }) {
   const [file, setFile] = useState(null);
@@ -237,8 +241,7 @@ export default function ImportStartups({ onClose, onImport }) {
 
       const allErrors = [];
       const validStartups = [];
-      const existingStartups = JSON.parse(localStorage.getItem('startups') || '[]');
-      let magicCodeCounter = existingStartups.length + 1;
+      let magicCodeCounter = 1; // Start from 1, backend will handle uniqueness
 
       jsonData.forEach((row, index) => {
         // Validate row
