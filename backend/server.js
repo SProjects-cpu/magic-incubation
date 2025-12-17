@@ -54,7 +54,8 @@ app.use(compression());
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://magic-incubation-frontend.onrender.com'
+  'https://magic-incubation-frontend.onrender.com',
+  'https://magic-incubation.vercel.app'
 ];
 
 app.use(cors({
