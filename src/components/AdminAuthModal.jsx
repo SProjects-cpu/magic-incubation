@@ -84,6 +84,14 @@ export default function AdminAuthModal({
         setTimeout(() => {
           onConfirm();
         }, 100);
+      } else if (response.status === 400) {
+        // Validation error - show detailed message
+        if (data.errors && Array.isArray(data.errors)) {
+          const errorMessages = data.errors.map(err => err.msg).join('. ');
+          setError(errorMessages || 'Validation failed. Please check your input.');
+        } else {
+          setError(data.message || 'Validation failed. Please check your input.');
+        }
       } else if (response.status === 401) {
         // Check if it's a token issue or credential issue
         if (data.message?.includes('token') || data.message?.includes('expired') || data.message?.includes('authorized')) {
@@ -171,9 +179,10 @@ export default function AdminAuthModal({
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-4 py-2.5 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-magic-500 focus:border-magic-500 outline-none transition-all"
-              placeholder="admin@example.com"
+              placeholder="admin@magic.com"
               autoComplete="email"
             />
+            <p className="text-xs text-gray-500 mt-1">Default: admin@magic.com</p>
           </div>
 
           <div>
@@ -189,6 +198,7 @@ export default function AdminAuthModal({
               placeholder="Enter your password"
               autoComplete="current-password"
             />
+            <p className="text-xs text-gray-500 mt-1">Default: magic2024</p>
           </div>
 
           {error && (
